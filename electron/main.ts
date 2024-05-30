@@ -36,6 +36,10 @@ function createWindow() {
     },
   })
 
+  // Disable task throttling of timer tasks from background pages
+  // https://github.com/electron/electron/issues/7079
+  win.webContents.setBackgroundThrottling(false)
+
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
