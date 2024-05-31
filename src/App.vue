@@ -43,6 +43,7 @@ const initSate = () => {
   return {
     running: false,
     paused: false,
+    ended: true,
     switch: Switch.Play
   }
 }
@@ -64,32 +65,43 @@ function getTimeValue() {
 
 async function onSwitch() {
   if (state.running) {
-    state.running = false;
-    state.paused = true;
-    await nextTick();
-
     countdown.value.abort();
     last = countdown.value.totalMilliseconds;
+
+    state.running = false;
+    state.paused = true;
+    state.ended = false;
+    state.switch = Switch.Play;
   } else {
     state.running = true;
     state.paused = false;
+    state.ended = false;
+    state.switch = Switch.Pause;
     await nextTick();
 
     time.value = getTimeValue();
     countdown.value.restart();
   }
-  state.switch = state.running ? Switch.Pause : Switch.Play;
 }
 
 const NOTIFICATION_TITLE = 'countdown-desktop';
 const NOTIFICATION_BODY = 'Your countdown has ended!'
 
 function onCancel() {
+  reset();
+  countdown.value.end();
+}
+
+function reset() {
   Object.assign(state, initSate());
   Object.assign(slot, initSlot());
-
   last = 0;
-  countdown.value.end();
+}
+
+function onEnd() {
+  if (!state.ended) {
+    reset();
+  }
   new window.Notification(NOTIFICATION_TITLE, { body: NOTIFICATION_BODY });
 }
 
@@ -99,7 +111,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <vue-countdown v-if="isReady" ref="countdown" :auto-start="false" :time="time" @progress="onProgress">
+  <vue-countdown v-if="isReady" ref="countdown" :auto-start="false" :time="time" @progress="onProgress" @end="onEnd">
     <div class="flex justify-center items-center flex-col h-screen">
       <div class="grid grid-flow-col gap-5 text-center auto-cols-max" v-show="state.running || state.paused">
         <div class="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
@@ -141,7 +153,7 @@ onMounted(() => {
           oninput="if(value<0)value=0; if(value>59)value=59;" placeholder="Seconds">
       </div>
       <div class="flex mt-5 gap-5">
-        <button class="btn btn-wide" @click="onCancel" :disabled="!state.running && !state.paused">Cancel</button>
+        <button class="btn btn-wide" @click="onCancel" :disabled="state.ended">Cancel</button>
         <button class="btn btn-wide" @click="onSwitch">{{ state.switch }}</button>
       </div>
     </div>
