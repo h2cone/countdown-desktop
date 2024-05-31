@@ -1,45 +1,54 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref, nextTick } from 'vue';
 
 const countdown = ref();
+const time = ref(1);
 const isReady = ref(false);
 
-const time = ref(1);
-const seconds = ref(0);
-const mintues = ref(0);
-const hours = ref(0);
-const days = ref(0);
+const initSlot = () => {
+  return {
+    seconds: 0,
+    mintues: 0,
+    hours: 0,
+    days: 0,
+  }
+}
+const slot = reactive(initSlot());
 
-const currentSeconds = computed(() => {
-  return { '--value': seconds.value, }
+const seconds = computed(() => {
+  return { '--value': slot.seconds, }
 });
-const currentMintues = computed(() => ({
-  '--value': mintues.value,
+const mintues = computed(() => ({
+  '--value': slot.mintues,
 }));
-const currentHours = computed(() => ({
-  '--value': hours.value,
+const hours = computed(() => ({
+  '--value': slot.hours,
 }));
-const currentDays = computed(() => ({
-  '--value': days.value,
+const days = computed(() => ({
+  '--value': slot.days,
 }));
 
 function onProgress(data: any) {
-  seconds.value = data.seconds;
-  mintues.value = data.minutes;
-  hours.value = data.hours;
-  days.value = data.days;
+  slot.seconds = data.seconds;
+  slot.mintues = data.minutes;
+  slot.hours = data.hours;
+  slot.days = data.days;
 }
+
+enum Switch {
+  Play = 'Play',
+  Pause = 'Pause',
+}
+const initSate = () => {
+  return {
+    running: false,
+    paused: false,
+    switch: Switch.Play
+  }
+}
+const state = reactive(initSate());
 
 let last = 0;
-const started = ref(false);
-const paused = ref(false);
-const switchSate = ref('Play');
-
-function onAbort() {
-  started.value = false;
-  last = countdown.value.totalMilliseconds;
-}
-
 const daysInput = ref();
 const hoursInput = ref();
 const mintuesInput = ref();
@@ -50,34 +59,38 @@ function getTimeValue() {
   const hours = hoursInput.value.value;
   const mintues = mintuesInput.value.value;
   const seconds = secondsInput.value.value;
-  return last === 0 ? (seconds * 1000 + mintues * 60 * 1000 + hours * 60 * 60 * 1000 + days * 24 * 60 * 60 * 1000) : last;
+  return last === 0 ? (seconds * 1000 + mintues * 60 * 1000 + hours * 60 * 60 * 1000 + days * 24 * 60 * 60 * 1000) + 1000 : last;
 }
 
-function onSwitch() {
-  if (started.value) {
-    started.value = false;
+async function onSwitch() {
+  if (state.running) {
+    state.running = false;
+    state.paused = true;
+    await nextTick();
+
     countdown.value.abort();
-    paused.value = true;
+    last = countdown.value.totalMilliseconds;
   } else {
-    started.value = true;
+    state.running = true;
+    state.paused = false;
+    await nextTick();
+
     time.value = getTimeValue();
-    countdown.value.start();
+    countdown.value.restart();
   }
-  switchSate.value = started.value ? 'Pause' : 'Play';
+  state.switch = state.running ? Switch.Pause : Switch.Play;
 }
+
+const NOTIFICATION_TITLE = 'countdown-desktop';
+const NOTIFICATION_BODY = 'Your countdown has ended!'
 
 function onCancel() {
-  countdown.value.end();
-  started.value = false;
-  paused.value = false;
-  switchSate.value = 'Play';
-
-  seconds.value = 0;
-  mintues.value = 0;
-  hours.value = 0;
-  days.value = 0;
+  Object.assign(state, initSate());
+  Object.assign(slot, initSlot());
 
   last = 0;
+  countdown.value.end();
+  new window.Notification(NOTIFICATION_TITLE, { body: NOTIFICATION_BODY });
 }
 
 onMounted(() => {
@@ -86,36 +99,35 @@ onMounted(() => {
 </script>
 
 <template>
-  <vue-countdown v-if="isReady" ref="countdown" :auto-start="false" :time="time" @progress="onProgress"
-    @abort="onAbort">
+  <vue-countdown v-if="isReady" ref="countdown" :auto-start="false" :time="time" @progress="onProgress">
     <div class="flex justify-center items-center flex-col h-screen">
-      <div class="grid grid-flow-col gap-5 text-center auto-cols-max" v-show="started || paused">
+      <div class="grid grid-flow-col gap-5 text-center auto-cols-max" v-show="state.running || state.paused">
         <div class="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
           <span class="countdown font-mono text-5xl">
-            <span :style="currentDays"></span>
+            <span :style="days"></span>
           </span>
           days
         </div>
         <div class="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
           <span class="countdown font-mono text-5xl">
-            <span :style="currentHours"></span>
+            <span :style="hours"></span>
           </span>
           hours
         </div>
         <div class="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
           <span class="countdown font-mono text-5xl">
-            <span :style="currentMintues"></span>
+            <span :style="mintues"></span>
           </span>
           min
         </div>
         <div class="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
           <span class="countdown font-mono text-5xl">
-            <span :style="currentSeconds"></span>
+            <span :style="seconds"></span>
           </span>
           sec
         </div>
       </div>
-      <div class="flex mt-5 gap-1" v-show="!started && !paused">
+      <div class="flex mt-5 gap-1" v-show="!(state.running || state.paused)">
         <input ref="daysInput" class="input input-bordered input-md w-full max-w-xs" type="number" min="0" max="99"
           oninput="if(value<0)value=0; if(value>99)value=99" placeholder="Days">
 
@@ -129,8 +141,8 @@ onMounted(() => {
           oninput="if(value<0)value=0; if(value>59)value=59;" placeholder="Seconds">
       </div>
       <div class="flex mt-5 gap-5">
-        <button class="btn btn-wide" @click="onCancel">Cancel</button>
-        <button class="btn btn-wide" @click="onSwitch">{{ switchSate }}</button>
+        <button class="btn btn-wide" @click="onCancel" :disabled="!state.running && !state.paused">Cancel</button>
+        <button class="btn btn-wide" @click="onSwitch">{{ state.switch }}</button>
       </div>
     </div>
   </vue-countdown>
